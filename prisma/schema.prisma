@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model PaymentConfig {
+  id              String   @id @default("default")
+  vtbUserName     String   @default("test_user")
+  vtbPassword     String   @default("test_user_password")
+  gatewayUrl      String   @default("https://vtbkz.rbsuat.com/payment/rest")
+  currency        String   @default("398")
+  language        String   @default("ru")
+  tildaCallbackUrl String  @default("https://forms.tildaapi.com/payment/custom/vtb24ru/")
+  tildaSecret     String   @default("")
+  webhookSecret   String   @default("")
+  adminApiKey     String   @default("")
+  successUrl      String   @default("")
+  failUrl         String   @default("")
+  isTestMode      Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+
+model PaymentTransaction {
+  id              String   @id @default(cuid())
+  orderId         String
+  orderNumber     String
+  amount          Int
+  currency        String
+  formUrl         String?
+  status          Int      @default(0)
+  tildaPaymentId  String?
+  requestBody     String?
+  callbackData    String?
+  ipAddress       String?
+  signatureValid  Boolean?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model RateLimitEntry {
+  id        String   @id @default(cuid())
+  ipAddress String
+  endpoint  String
+  count     Int      @default(1)
+  resetAt   DateTime @default(now())
+  createdAt DateTime @default(now())
+}

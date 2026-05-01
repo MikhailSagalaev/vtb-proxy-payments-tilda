@@ -1,0 +1,24 @@
+node_modules/
+.next/
+*.log
+.env
+.env.local
+.env.production
+db/*.db
+db/*.db-wal
+db/*.db-shm
+db/*.db-journal
+prisma/migrations/
+
+# Build artifacts
+out/
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.suo
+*.user
