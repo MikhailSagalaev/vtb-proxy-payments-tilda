@@ -154,12 +154,28 @@ export default function Home() {
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [adminKey, setAdminKey] = useState('');
   const [adminAuthenticated, setAdminAuthenticated] = useState(false);
+  const [showAdminKey, setShowAdminKey] = useState(false);
+  const [showGeneratedKey, setShowGeneratedKey] = useState(false);
+  const [showGeneratedSecret, setShowGeneratedSecret] = useState(false);
 
   const [form, setForm] = useState({
     vtbUserName: '', vtbPassword: '', gatewayUrl: '', currency: '398', language: 'ru',
     tildaCallbackUrl: '', tildaSecret: '', webhookSecret: '', adminApiKey: '',
     successUrl: '', failUrl: '', isTestMode: true,
   });
+
+  // Restore admin key from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('vtb_admin_key');
+    if (saved) {
+      setAdminKey(saved);
+    }
+  }, []);
+
+  // Validate that string is safe for HTTP headers (ASCII only)
+  const isValidHeaderValue = (value: string): boolean => {
+    return /^[\x20-\x7E]*$/.test(value);
+  };
 
   const showMessage = (type: 'success' | 'error' | 'info', text: string) => {
     setMessage({ type, text });
@@ -196,8 +212,7 @@ export default function Home() {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      // API key must be sent via Authorization header only (not query params — they end up in server logs)
-      if (!adminKey) return;
+      if (!adminKey || !isValidHeaderValue(adminKey)) return;
       const res = await fetch('/api/transactions', {
         headers: { 'Authorization': `Bearer ${adminKey}` },
       });
@@ -226,6 +241,11 @@ export default function Home() {
         setSaving(false);
         return;
       }
+      if (!isValidHeaderValue(adminKey)) {
+        showMessage('error', 'Admin API Key должен содержать только латинские символы, цифры и спецсимволы (без кириллицы)');
+        setSaving(false);
+        return;
+      }
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
@@ -235,6 +255,7 @@ export default function Home() {
       if (data.success) {
         setConfig(data.config);
         setAdminAuthenticated(true);
+        localStorage.setItem('vtb_admin_key', adminKey);
         showMessage('success', 'Настройки сохранены');
         fetchTransactions();
       } else {
@@ -247,12 +268,31 @@ export default function Home() {
     }
   };
 
-  const handleAdminAuth = () => {
-    if (adminKey) {
-      setAdminAuthenticated(true);
-      showMessage('success', 'Авторизация успешна');
-    } else {
+  const handleAdminAuth = async () => {
+    if (!adminKey) {
       showMessage('error', 'Введите Admin API Key');
+      return;
+    }
+    if (!isValidHeaderValue(adminKey)) {
+      showMessage('error', 'Ключ должен содержать только латинские символы и цифры (без кириллицы)');
+      return;
+    }
+    try {
+      // Verify key against server by trying to fetch transactions
+      const res = await fetch('/api/transactions', {
+        headers: { 'Authorization': `Bearer ${adminKey}` },
+      });
+      if (res.ok) {
+        setAdminAuthenticated(true);
+        localStorage.setItem('vtb_admin_key', adminKey);
+        const data = await res.json();
+        setTransactions(data);
+        showMessage('success', 'Авторизация успешна');
+      } else {
+        showMessage('error', 'Неверный Admin API Key');
+      }
+    } catch {
+      showMessage('error', 'Ошибка подключения к серверу');
     }
   };
 
@@ -320,20 +360,27 @@ export default function Home() {
       {/* Main */}
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
 
-        {/* Admin Auth (shown if not authenticated and no admin key in form yet) */}
-        {!adminAuthenticated && !config?.adminApiKey && (
+        {/* Admin Auth */}
+        {!adminAuthenticated && (
           <Card className="border-neutral-800 bg-neutral-900/50">
             <CardContent className="pt-6">
               <div className="flex flex-col sm:flex-row gap-3 items-end">
                 <div className="flex-1 space-y-1.5">
                   <Label className="text-sm">Admin API Key</Label>
-                  <p className="text-xs text-neutral-500">Создайте ключ на вкладке &quot;Безопасность&quot; (поле ниже)</p>
-                  <Input
-                    value={adminKey}
-                    onChange={(e) => setAdminKey(e.target.value)}
-                    placeholder="Введите ключ для доступа к настройкам"
-                    className="bg-neutral-800 border-neutral-700 text-white"
-                  />
+                  <p className="text-xs text-neutral-500">Введите ваш ключ (при первом запуске — создайте на вкладке &quot;Безопасность&quot;)</p>
+                  <div className="flex gap-2">
+                    <Input
+                      type={showAdminKey ? 'text' : 'password'}
+                      value={adminKey}
+                      onChange={(e) => setAdminKey(e.target.value)}
+                      placeholder="Введите ключ для доступа к настройкам"
+                      className="bg-neutral-800 border-neutral-700 text-white"
+                      onKeyDown={(e) => e.key === 'Enter' && handleAdminAuth()}
+                    />
+                    <Button variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowAdminKey(!showAdminKey)}>
+                      {showAdminKey ? 'Скрыть' : 'Показать'}
+                    </Button>
+                  </div>
                 </div>
                 <Button onClick={handleAdminAuth} variant="outline" className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10">
                   Войти
@@ -681,10 +728,15 @@ export default function Home() {
                   <CardDescription className="text-xs">API ключ для доступа к изменению настроек и просмотру транзакций</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <FormField id="adminApiKey" label="Admin API Key" hint="Используется для авторизации при сохранении настроек. Передаётся через заголовок Authorization: Bearer &lt;key&gt;">
-                    <Input type="password" value={form.adminApiKey} onChange={(e) => setForm({ ...form, adminApiKey: e.target.value })} placeholder="Сгенерируйте случайный ключ..." className="bg-neutral-800 border-neutral-700 text-white font-mono text-xs" />
+                  <FormField id="adminApiKey" label="Admin API Key" hint="Используется для авторизации при сохранении настроек. Передаётся через заголовок Authorization: Bearer <key>">
+                    <div className="flex gap-2">
+                      <Input type={showGeneratedKey ? 'text' : 'password'} value={form.adminApiKey} onChange={(e) => setForm({ ...form, adminApiKey: e.target.value })} placeholder="Сгенерируйте случайный ключ..." className="bg-neutral-800 border-neutral-700 text-white font-mono text-xs" />
+                      <Button variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowGeneratedKey(!showGeneratedKey)}>
+                        {showGeneratedKey ? 'Скрыть' : 'Показать'}
+                      </Button>
+                    </div>
                   </FormField>
-                  {!form.adminApiKey && (
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -692,13 +744,16 @@ export default function Home() {
                       onClick={() => {
                         const key = generateRandomHex(48);
                         setForm({ ...form, adminApiKey: key });
+                        setAdminKey(key);
+                        setShowGeneratedKey(true);
                         navigator.clipboard.writeText(key);
-                        showMessage('info', 'Ключ сгенерирован и скопирован в буфер обмена');
+                        showMessage('info', 'Ключ сгенерирован и скопирован в буфер. Нажмите Сохранить!');
                       }}
                     >
-                      Сгенерировать ключ
+                      Сгенерировать новый ключ
                     </Button>
-                  )}
+                    {form.adminApiKey && <CopyButton text={form.adminApiKey} variant="small" />}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -709,9 +764,14 @@ export default function Home() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField id="tildaSecret" label="Tilda Secret (секрет для подписи заказа)" hint="Этот же секрет укажите в Tilda в расширенных настройках шаблона. Используется для HMAC-SHA256 подписи запросов от Tilda и коллбэков к Tilda.">
-                    <Input type="password" value={form.tildaSecret} onChange={(e) => setForm({ ...form, tildaSecret: e.target.value })} placeholder="Секрет из настроек Tilda..." className="bg-neutral-800 border-neutral-700 text-white font-mono text-xs" />
+                    <div className="flex gap-2">
+                      <Input type={showGeneratedSecret ? 'text' : 'password'} value={form.tildaSecret} onChange={(e) => setForm({ ...form, tildaSecret: e.target.value })} placeholder="Секрет из настроек Tilda..." className="bg-neutral-800 border-neutral-700 text-white font-mono text-xs" />
+                      <Button variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowGeneratedSecret(!showGeneratedSecret)}>
+                        {showGeneratedSecret ? 'Скрыть' : 'Показать'}
+                      </Button>
+                    </div>
                   </FormField>
-                  {!form.tildaSecret && (
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -719,13 +779,15 @@ export default function Home() {
                       onClick={() => {
                         const secret = generateRandomHex(64);
                         setForm({ ...form, tildaSecret: secret });
+                        setShowGeneratedSecret(true);
                         navigator.clipboard.writeText(secret);
                         showMessage('info', 'Tilda Secret сгенерирован и скопирован. Вставьте его в настройки Tilda.');
                       }}
                     >
                       Сгенерировать секрет
                     </Button>
-                  )}
+                    {form.tildaSecret && <CopyButton text={form.tildaSecret} variant="small" />}
+                  </div>
                   <Separator className="bg-neutral-800" />
                   <FormField id="webhookSecret" label="VTB KZ Webhook Secret" hint="Секрет для верификации коллбэков от VTB KZ. Настройте его в личном кабинете VTB KZ как дополнительный заголовок X-Signature в коллбэках.">
                     <Input type="password" value={form.webhookSecret} onChange={(e) => setForm({ ...form, webhookSecret: e.target.value })} placeholder="Секрет для верификации от VTB KZ..." className="bg-neutral-800 border-neutral-700 text-white font-mono text-xs" />

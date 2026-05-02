@@ -173,10 +173,12 @@ export async function verifyAdminKey(request: Request): Promise<boolean> {
   const authHeader = request.headers.get('authorization');
   const providedKey = authHeader?.replace('Bearer ', '').trim() || '';
 
-  if (!providedKey) return false;
-
   const config = await db.paymentConfig.findUnique({ where: { id: 'default' } });
-  if (!config?.adminApiKey) return false;
+
+  // First-time setup: no admin key configured yet — allow access to set one
+  if (!config?.adminApiKey) return true;
+
+  if (!providedKey) return false;
 
   // Timing-safe comparison to prevent timing attacks on admin key
   try {
