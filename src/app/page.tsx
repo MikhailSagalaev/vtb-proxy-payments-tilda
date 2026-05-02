@@ -130,6 +130,13 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+/** Generate random hex string (works in non-secure HTTP contexts, unlike crypto.randomUUID) */
+function generateRandomHex(length: number = 48): string {
+  const bytes = new Uint8Array(Math.ceil(length / 2));
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').slice(0, length);
+}
+
 function formatAmount(amount: number, currency: string) {
   const symbols: Record<string, string> = { '398': '₸', '643': '₽', '840': '$', '978': '€' };
   return `${(amount / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbols[currency] || currency}`;
@@ -683,7 +690,7 @@ export default function Home() {
                       size="sm"
                       className="border-neutral-700 text-neutral-300 hover:bg-neutral-800"
                       onClick={() => {
-                        const key = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+                        const key = generateRandomHex(48);
                         setForm({ ...form, adminApiKey: key });
                         navigator.clipboard.writeText(key);
                         showMessage('info', 'Ключ сгенерирован и скопирован в буфер обмена');
@@ -710,7 +717,7 @@ export default function Home() {
                       size="sm"
                       className="border-neutral-700 text-neutral-300 hover:bg-neutral-800"
                       onClick={() => {
-                        const secret = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+                        const secret = generateRandomHex(64);
                         setForm({ ...form, tildaSecret: secret });
                         navigator.clipboard.writeText(secret);
                         showMessage('info', 'Tilda Secret сгенерирован и скопирован. Вставьте его в настройки Tilda.');
