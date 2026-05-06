@@ -159,6 +159,7 @@ export default function Home() {
   const [showGeneratedKey, setShowGeneratedKey] = useState(false);
   const [showGeneratedSecret, setShowGeneratedSecret] = useState(false);
   const [showVtbPassword, setShowVtbPassword] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
 
   const [form, setForm] = useState({
     vtbUserName: '', vtbPassword: '', gatewayUrl: '', currency: '398', language: 'ru',
@@ -850,7 +851,35 @@ export default function Home() {
                   </div>
                   <Separator className="bg-neutral-800" />
                   <FormField id="webhookSecret" label="VTB KZ Webhook Secret" hint="Секрет для верификации коллбэков от VTB KZ. Настройте его в личном кабинете VTB KZ как дополнительный заголовок X-Signature в коллбэках.">
-                    <Input type="password" value={form.webhookSecret} onChange={(e) => setForm({ ...form, webhookSecret: e.target.value })} placeholder="Секрет для верификации от VTB KZ..." className="bg-neutral-800 border-neutral-700 text-white font-mono text-xs" />
+                    <div className="flex gap-2">
+                      <Input
+                        type={showWebhookSecret ? 'text' : 'password'}
+                        value={form.webhookSecret}
+                        onChange={(e) => setForm({ ...form, webhookSecret: e.target.value })}
+                        placeholder="Секрет для верификации от VTB KZ..."
+                        className="bg-neutral-800 border-neutral-700 text-white font-mono text-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 text-xs text-neutral-400"
+                        onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                      >
+                        {showWebhookSecret ? 'Скрыть' : 'Показать'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800"
+                        onClick={revealSecrets}
+                        disabled={revealing}
+                        title="Требует включения ALLOW_SECRET_READ=true на сервере"
+                      >
+                        {revealing ? '...' : 'Загрузить'}
+                      </Button>
+                    </div>
                   </FormField>
                 </CardContent>
               </Card>

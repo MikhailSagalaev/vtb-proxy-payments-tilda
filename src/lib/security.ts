@@ -158,7 +158,8 @@ export function sanitizeOrderId(input: string): string {
 }
 
 export function parseAmount(raw: string): number | null {
-  const cleaned = raw.replace(/[^\d.,]/g, '').replace(',', '.');
+  // Allow minus sign for validation, but reject if negative
+  const cleaned = raw.replace(/[^\d.,-]/g, '').replace(',', '.');
   const num = parseFloat(cleaned);
   if (isNaN(num) || num <= 0 || num > 999_999_999) return null;
   return Math.round(num * 100);
