@@ -151,12 +151,14 @@ export default function Home() {
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [revealing, setRevealing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [adminKey, setAdminKey] = useState('');
   const [adminAuthenticated, setAdminAuthenticated] = useState(false);
   const [showAdminKey, setShowAdminKey] = useState(false);
   const [showGeneratedKey, setShowGeneratedKey] = useState(false);
   const [showGeneratedSecret, setShowGeneratedSecret] = useState(false);
+  const [showVtbPassword, setShowVtbPassword] = useState(false);
 
   const [form, setForm] = useState({
     vtbUserName: '', vtbPassword: '', gatewayUrl: '', currency: '398', language: 'ru',
@@ -209,6 +211,36 @@ export default function Home() {
       console.error('Failed to fetch config:', err);
     }
   }, []);
+
+  const revealSecrets = useCallback(async () => {
+    if (!adminKey || !isValidHeaderValue(adminKey)) {
+      showMessage('error', 'Введите корректный Admin API Key');
+      return;
+    }
+    setRevealing(true);
+    try {
+      const res = await fetch('/api/settings/secrets', {
+        headers: { 'Authorization': `Bearer ${adminKey}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showMessage('error', data?.error || 'Не удалось получить секреты');
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        vtbPassword: data.vtbPassword ?? prev.vtbPassword,
+        tildaSecret: data.tildaSecret ?? prev.tildaSecret,
+        webhookSecret: data.webhookSecret ?? prev.webhookSecret,
+      }));
+      setShowVtbPassword(true);
+      showMessage('success', 'Секреты загружены (показ включен локально в браузере)');
+    } catch {
+      showMessage('error', 'Не удалось получить секреты');
+    } finally {
+      setRevealing(false);
+    }
+  }, [adminKey]);
 
   const fetchTransactions = useCallback(async () => {
     try {
@@ -638,7 +670,35 @@ export default function Home() {
                     <Input value={form.vtbUserName} onChange={(e) => setForm({ ...form, vtbUserName: e.target.value })} placeholder="test_user" className="bg-neutral-800 border-neutral-700 text-white" />
                   </FormField>
                   <FormField id="vtbPassword" label="VTB API Пароль (password)" hint="Выдаётся в Sandbox VTB KZ при регистрации">
-                    <Input type="password" value={form.vtbPassword} onChange={(e) => setForm({ ...form, vtbPassword: e.target.value })} placeholder="••••••••" className="bg-neutral-800 border-neutral-700 text-white" />
+                    <div className="flex gap-2">
+                      <Input
+                        type={showVtbPassword ? 'text' : 'password'}
+                        value={form.vtbPassword}
+                        onChange={(e) => setForm({ ...form, vtbPassword: e.target.value })}
+                        placeholder="••••••••"
+                        className="bg-neutral-800 border-neutral-700 text-white"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 text-xs text-neutral-400"
+                        onClick={() => setShowVtbPassword(!showVtbPassword)}
+                      >
+                        {showVtbPassword ? 'Скрыть' : 'Показать'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800"
+                        onClick={revealSecrets}
+                        disabled={revealing}
+                        title="Требует включения ALLOW_SECRET_READ=true на сервере"
+                      >
+                        {revealing ? '...' : 'Загрузить'}
+                      </Button>
+                    </div>
                   </FormField>
 
                   <SectionHeader title="Режим и шлюз" />
