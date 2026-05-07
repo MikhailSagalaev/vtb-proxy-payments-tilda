@@ -152,6 +152,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [revealing, setRevealing] = useState(false);
+  const [insecureMode, setInsecureMode] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [adminKey, setAdminKey] = useState(() => {
     if (typeof window === 'undefined') return '';
@@ -188,6 +189,7 @@ export default function Home() {
       }
       const res = await fetch('/api/settings', { headers });
       const data = await res.json();
+      setInsecureMode(!!data?.insecureMode);
       setConfig(data);
       setForm({
         vtbUserName: data.vtbUserName || '',
@@ -273,29 +275,36 @@ export default function Home() {
       const isFirstSetup = (config as any)?.firstSetup === true;
       const effectiveKey = adminKey || (isFirstSetup ? (form.adminApiKey || '') : '');
 
-      if (!effectiveKey) {
-        showMessage('error', 'Введите Admin API Key (на вкладке «Безопасность» можно сгенерировать)');
-        setSaving(false);
-        return;
-      }
-      if (!isValidHeaderValue(effectiveKey)) {
-        showMessage('error', 'Admin API Key должен содержать только латинские символы, цифры и спецсимволы (без кириллицы)');
-        setSaving(false);
-        return;
+      if (!insecureMode) {
+        if (!effectiveKey) {
+          showMessage('error', 'Введите Admin API Key');
+          setSaving(false);
+          return;
+        }
+        if (!isValidHeaderValue(effectiveKey)) {
+          showMessage('error', 'Admin API Key должен содержать только латинские символы, цифры и спецсимволы (без кириллицы)');
+          setSaving(false);
+          return;
+        }
       }
       const res = await fetch('/api/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveKey}` },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(insecureMode ? {} : { 'Authorization': `Bearer ${effectiveKey}` }),
+        },
         body: JSON.stringify(form),
       });
       const data = await res.json();
       if (data.success) {
         setConfig(data.config);
-        setAdminAuthenticated(true);
-        setAdminKey(effectiveKey);
-        localStorage.setItem('vtb_admin_key', effectiveKey);
+        if (!insecureMode) {
+          setAdminAuthenticated(true);
+          setAdminKey(effectiveKey);
+          localStorage.setItem('vtb_admin_key', effectiveKey);
+        }
         showMessage('success', 'Настройки сохранены');
-        fetchTransactions();
+        if (!insecureMode) fetchTransactions();
       } else {
         showMessage('error', `Ошибка: ${data.error}`);
       }

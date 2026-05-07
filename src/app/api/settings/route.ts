@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
       // First time — return minimal info so the UI can show the setup wizard
       return NextResponse.json({
         firstSetup: true,
+        insecureMode: isInsecureMode(),
         isTestMode: true,
         adminApiKey: '',
       });
@@ -42,6 +43,7 @@ export async function GET(request: NextRequest) {
     // Mask secrets — they should never be readable via API even when authorized
     return NextResponse.json({
       ...config,
+      insecureMode: isInsecureMode(),
       vtbPassword: config.vtbPassword ? '••••••••' : '',
       tildaSecret: config.tildaSecret ? '••••••••' : '',
       webhookSecret: config.webhookSecret ? '••••••••' : '',
