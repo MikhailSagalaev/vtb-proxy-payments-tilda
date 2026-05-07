@@ -1,6 +1,10 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { db } from '@/lib/db';
 
+export function isInsecureMode(): boolean {
+  return (process.env.INSECURE_MODE || '').toLowerCase() === 'true';
+}
+
 // ==============================
 // HMAC-SHA256 Signature Utilities
 // ==============================
@@ -34,6 +38,7 @@ export function verifyTildaSignature(
   secret: string,
   receivedSignature: string
 ): boolean {
+  if (isInsecureMode()) return true;
   if (!secret) return true; // Allow unsigned requests when no secret configured (test mode)
   const expected = generateTildaSignature(params, secret);
   // Timing-safe comparison
@@ -58,6 +63,7 @@ export function generateWebhookSignature(body: string, secret: string): string {
  * Verify VTB KZ webhook signature from header.
  */
 export function verifyWebhookSignature(body: string, secret: string, signature: string): boolean {
+  if (isInsecureMode()) return true;
   if (!secret) return true;
   const expected = generateWebhookSignature(body, secret);
   try {
@@ -170,6 +176,7 @@ export function parseAmount(raw: string): number | null {
 // ==============================
 
 export async function verifyAdminKey(request: Request): Promise<boolean> {
+  if (isInsecureMode()) return true;
   // Only accept key via Authorization header — query params end up in server logs
   const authHeader = request.headers.get('authorization');
   const providedKey = authHeader?.replace('Bearer ', '').trim() || '';

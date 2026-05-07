@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { registerOrder, getConfig, extractTildaParams, logRequest } from '@/lib/vtb';
 import { db } from '@/lib/db';
-import { verifyTildaSignature, checkRateLimit, getClientIp } from '@/lib/security';
+import { verifyTildaSignature, checkRateLimit, getClientIp, isInsecureMode } from '@/lib/security';
 
 export async function POST(request: NextRequest) {
   const clientIp = getClientIp(request);
@@ -41,7 +41,9 @@ export async function POST(request: NextRequest) {
 
     let signatureValid: boolean | null = null;
 
-    if (config.tildaSecret) {
+    const insecure = isInsecureMode();
+
+    if (config.tildaSecret && !insecure) {
       if (!signature) {
         // Secret is configured but no signature provided — reject
         console.warn(`[${new Date().toISOString()}] MISSING SIGNATURE from ${clientIp} for order ${paymentId} (secret is configured)`);
