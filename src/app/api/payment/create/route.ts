@@ -98,8 +98,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Register order with VTB KZ
-    const returnUrl = config.successUrl || `${process.env.BASE_URL || ''}/payment/success`;
-    const failUrl = config.failUrl || `${process.env.BASE_URL || ''}/payment/fail`;
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    const forwardedHost = request.headers.get('x-forwarded-host');
+    const host = forwardedHost || request.headers.get('host');
+    const proto = forwardedProto || (request.nextUrl.protocol ? request.nextUrl.protocol.replace(':', '') : 'https');
+    const inferredBaseUrl = host ? `${proto}://${host}` : '';
+    const baseUrl = process.env.BASE_URL || inferredBaseUrl;
+
+    const returnUrl = config.successUrl || `${baseUrl}/payment/success`;
+    const failUrl = config.failUrl || `${baseUrl}/payment/fail`;
 
     const result = await registerOrder({
       amount,
