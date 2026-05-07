@@ -142,6 +142,8 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
     logReq('info', requestId, 'VTB register.do request', maskSensitive({
       gatewayUrl,
       userName: config.vtbUserName,
+      passwordPresent: Boolean(config.vtbPassword),
+      passwordLength: config.vtbPassword.length,
       amount: String(params.amount),
       currency: params.currency || config.currency,
       orderNumber: sanitizeOrderId(params.orderNumber),
@@ -164,6 +166,12 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
     } catch {
       data = { _nonJson: rawText };
     }
+
+    logReq('info', requestId, 'VTB register.do response', {
+      status: response.status,
+      ok: response.ok,
+      body: maskSensitive(data || {}),
+    }, false);
 
     if (data.error) {
       throw new Error(data.errorMessage || `VTB error: ${data.error}`);

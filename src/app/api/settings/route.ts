@@ -98,7 +98,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     logRequest('info', requestId, 'Updating config', { clientIp, keys: Object.keys(body || {}) }, false);
     const config = await updateConfig(body);
-    logRequest('info', requestId, 'Config updated', { clientIp, isTestMode: config.isTestMode }, false);
+    logRequest('info', requestId, 'Config updated', {
+      clientIp,
+      isTestMode: config.isTestMode,
+      vtbUserName: config.vtbUserName,
+      gatewayUrl: config.gatewayUrl,
+      currency: config.currency,
+      language: config.language,
+      successUrl: config.successUrl,
+      failUrl: config.failUrl,
+      tildaCallbackUrl: config.tildaCallbackUrl,
+      hasVtbPassword: Boolean(config.vtbPassword),
+      vtbPasswordLength: config.vtbPassword.length,
+      hasTildaSecret: Boolean(config.tildaSecret),
+      hasAdminApiKey: Boolean(config.adminApiKey),
+    }, false);
     return NextResponse.json({
       success: true,
       config: {
