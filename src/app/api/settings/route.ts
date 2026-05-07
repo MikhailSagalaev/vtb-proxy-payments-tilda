@@ -16,6 +16,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 
+    // In insecure mode we expose masked config without requiring Admin API Key.
+    // This keeps the "minimal working" testing flow usable even before security is configured.
+    if (isInsecureMode()) {
+      const config = await getConfig();
+      const firstSetup = !config.adminApiKey;
+      logRequest('info', requestId, 'Returning masked settings (insecure mode)', { clientIp, firstSetup, isTestMode: config.isTestMode }, false);
+      return NextResponse.json({
+        ...config,
+        firstSetup,
+        insecureMode: true,
+        vtbPassword: config.vtbPassword ? '••••••••' : '',
+        tildaSecret: config.tildaSecret ? '••••••••' : '',
+        webhookSecret: config.webhookSecret ? '••••••••' : '',
+        adminApiKey: config.adminApiKey ? '••••••••' : '',
+      });
+    }
+
     // Check if this is a first-time setup (no admin key configured)
     const rawConfig = await db.paymentConfig.findUnique({ where: { id: 'default' } });
     const isFirstSetup = !rawConfig?.adminApiKey;
