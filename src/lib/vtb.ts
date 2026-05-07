@@ -144,13 +144,20 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
       signal: controller.signal,
     });
 
-    const data = await response.json();
+    const rawText = await response.text();
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      data = { _nonJson: rawText };
+    }
 
     if (data.error) {
       throw new Error(data.errorMessage || `VTB error: ${data.error}`);
     }
     if (!data.orderId || !data.formUrl) {
-      throw new Error('VTB response missing orderId/formUrl');
+      const details = typeof data === 'object' && data ? JSON.stringify(maskSensitive(data)) : String(data);
+      throw new Error(`VTB response missing orderId/formUrl (status=${response.status}) ${details}`);
     }
 
     return {
