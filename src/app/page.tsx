@@ -189,7 +189,8 @@ export default function Home() {
       }
       const res = await fetch('/api/settings', { headers });
       const data = await res.json();
-      setInsecureMode(!!data?.insecureMode);
+      const insecure = !!data?.insecureMode;
+      setInsecureMode(insecure);
       setConfig(data);
       setForm({
         vtbUserName: data.vtbUserName || '',
@@ -209,6 +210,7 @@ export default function Home() {
       if (data.adminApiKey && data.adminApiKey !== '••••••••') {
         setAdminAuthenticated(true);
       }
+      if (insecure) setAdminAuthenticated(true);
     } catch (err) {
       console.error('Failed to fetch config:', err);
     }
@@ -408,13 +410,13 @@ export default function Home() {
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
 
         {/* Admin Auth */}
-        {!adminAuthenticated && (
+        {!adminAuthenticated && !insecureMode && (
           <Card className="border-neutral-800 bg-neutral-900/50">
             <CardContent className="pt-6">
               <div className="flex flex-col sm:flex-row gap-3 items-end">
                 <div className="flex-1 space-y-1.5">
                   <Label className="text-sm">Admin API Key</Label>
-                  <p className="text-xs text-neutral-500">Введите ваш ключ (при первом запуске — создайте на вкладке &quot;Безопасность&quot;)</p>
+                  <p className="text-xs text-neutral-500">Введите ваш ключ (создайте его в блоке «Безопасность» ниже)</p>
                   <div className="flex gap-2">
                     <Input
                       type={showAdminKey ? 'text' : 'password'}
@@ -457,11 +459,86 @@ export default function Home() {
                 <Alert className="border-red-500/30 bg-red-500/10 text-red-300">
                   <AlertTitle className="text-sm font-semibold">Безопасность не настроена!</AlertTitle>
                   <AlertDescription className="text-xs text-red-400">
-                    Перед подключением обязательно задайте Admin API Key и Tilda Secret на вкладке &quot;Безопасность&quot;.
+                    Перед подключением обязательно задайте Admin API Key и Tilda Secret в блоке «Безопасность» ниже.
                     Без этого любой сможет изменить ваши настройки.
                   </AlertDescription>
                 </Alert>
               )}
+
+              {/* Security */}
+              <Card className="border-neutral-800 bg-neutral-900/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold">Безопасность</CardTitle>
+                  <CardDescription className="text-xs">
+                    Здесь создаются/задаются Admin API Key и секреты. Нажмите «Сохранить», чтобы записать их в базу.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <FormField id="adminApiKey" label="Admin API Key" hint="Этот ключ нужен, чтобы войти сверху и менять настройки в боевом режиме.">
+                      <div className="flex gap-2">
+                        <Input
+                          type={showGeneratedKey ? 'text' : 'password'}
+                          value={form.adminApiKey}
+                          onChange={(e) => setForm({ ...form, adminApiKey: e.target.value })}
+                          placeholder="Сгенерируйте или задайте свой ключ"
+                          className="bg-neutral-800 border-neutral-700 text-white"
+                        />
+                        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowGeneratedKey(!showGeneratedKey)}>
+                          {showGeneratedKey ? 'Скрыть' : 'Показать'}
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800" onClick={() => setForm({ ...form, adminApiKey: generateRandomHex(48) })}>
+                          Сгенерировать
+                        </Button>
+                      </div>
+                    </FormField>
+
+                    <FormField id="tildaSecret" label="Tilda Secret" hint="Секрет для подписи запросов Tilda (создание платежа).">
+                      <div className="flex gap-2">
+                        <Input
+                          type={showGeneratedSecret ? 'text' : 'password'}
+                          value={form.tildaSecret}
+                          onChange={(e) => setForm({ ...form, tildaSecret: e.target.value })}
+                          placeholder="Секрет Tilda"
+                          className="bg-neutral-800 border-neutral-700 text-white"
+                        />
+                        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowGeneratedSecret(!showGeneratedSecret)}>
+                          {showGeneratedSecret ? 'Скрыть' : 'Показать'}
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800" onClick={() => setForm({ ...form, tildaSecret: generateRandomHex(64) })}>
+                          Сгенерировать
+                        </Button>
+                      </div>
+                    </FormField>
+
+                    <div className="sm:col-span-2">
+                      <FormField id="webhookSecret" label="VTB Callback Secret (опционально)" hint="Если VTB KZ присылает подпись колбэка — задайте здесь. Если нет, можно оставить пустым.">
+                        <div className="flex gap-2">
+                          <Input
+                            type={showWebhookSecret ? 'text' : 'password'}
+                            value={form.webhookSecret}
+                            onChange={(e) => setForm({ ...form, webhookSecret: e.target.value })}
+                            placeholder="Секрет для колбэков"
+                            className="bg-neutral-800 border-neutral-700 text-white"
+                          />
+                          <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowWebhookSecret(!showWebhookSecret)}>
+                            {showWebhookSecret ? 'Скрыть' : 'Показать'}
+                          </Button>
+                          <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800" onClick={() => setForm({ ...form, webhookSecret: generateRandomHex(64) })}>
+                            Сгенерировать
+                          </Button>
+                        </div>
+                      </FormField>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button onClick={handleSave} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[140px]">
+                      {saving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Сохранить'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Endpoints */}
               <Card className="border-neutral-800 bg-neutral-900/50">
@@ -520,7 +597,7 @@ export default function Home() {
                       <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-mono text-xs font-bold shrink-0">1</div>
                       <div className="space-y-1 min-w-0">
                         <h4 className="text-sm font-semibold text-neutral-100">Подготовьте секреты</h4>
-                        <p className="text-xs text-neutral-400 leading-relaxed">Перейдите на вкладку «Безопасность» в этом интерфейсе. Нажмите «Сгенерировать секрет» рядом с Tilda Secret — скопируйте его, он понадобится в шаге 3. Также сгенерируйте Admin API Key.</p>
+                        <p className="text-xs text-neutral-400 leading-relaxed">В блоке «Безопасность» (выше) сгенерируйте Tilda Secret и Admin API Key, затем нажмите «Сохранить».</p>
                       </div>
                     </div>
                   </div>
