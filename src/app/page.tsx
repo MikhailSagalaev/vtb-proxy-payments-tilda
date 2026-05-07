@@ -50,9 +50,12 @@ interface PaymentTransaction {
   formUrl: string | null;
   status: number;
   tildaPaymentId: string | null;
+  requestBody: string | null;
+  callbackData: string | null;
   ipAddress: string | null;
   signatureValid: boolean | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 // ==============================
@@ -142,6 +145,19 @@ function formatAmount(amount: number, currency: string) {
   return `${(amount / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbols[currency] || currency}`;
 }
 
+function isMaskedValue(value: string): boolean {
+  return value.includes('•');
+}
+
+function prettyJson(raw: string | null): string {
+  if (!raw) return '—';
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
 // ==============================
 // Main Page
 // ==============================
@@ -217,14 +233,18 @@ export default function Home() {
   }, [adminKey]);
 
   const revealSecrets = useCallback(async () => {
-    if (!adminKey || !isValidHeaderValue(adminKey)) {
+    if (!insecureMode && (!adminKey || !isValidHeaderValue(adminKey))) {
       showMessage('error', 'Введите корректный Admin API Key');
       return;
     }
     setRevealing(true);
     try {
+      const headers: HeadersInit = {};
+      if (adminKey && isValidHeaderValue(adminKey)) {
+        headers['Authorization'] = `Bearer ${adminKey}`;
+      }
       const res = await fetch('/api/settings/secrets', {
-        headers: { 'Authorization': `Bearer ${adminKey}` },
+        headers,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -236,21 +256,29 @@ export default function Home() {
         vtbPassword: data.vtbPassword ?? prev.vtbPassword,
         tildaSecret: data.tildaSecret ?? prev.tildaSecret,
         webhookSecret: data.webhookSecret ?? prev.webhookSecret,
+        adminApiKey: data.adminApiKey ?? prev.adminApiKey,
       }));
       setShowVtbPassword(true);
-      showMessage('success', 'Секреты загружены (показ включен локально в браузере)');
+      setShowGeneratedKey(true);
+      setShowGeneratedSecret(true);
+      setShowWebhookSecret(true);
+      showMessage('success', 'Секреты загружены и показаны локально в браузере');
     } catch {
       showMessage('error', 'Не удалось получить секреты');
     } finally {
       setRevealing(false);
     }
-  }, [adminKey]);
+  }, [adminKey, insecureMode]);
 
   const fetchTransactions = useCallback(async () => {
     try {
-      if (!adminKey || !isValidHeaderValue(adminKey)) return;
+      if (!insecureMode && (!adminKey || !isValidHeaderValue(adminKey))) return;
+      const headers: HeadersInit = {};
+      if (adminKey && isValidHeaderValue(adminKey)) {
+        headers['Authorization'] = `Bearer ${adminKey}`;
+      }
       const res = await fetch('/api/transactions', {
-        headers: { 'Authorization': `Bearer ${adminKey}` },
+        headers,
       });
       if (res.ok) {
         const data = await res.json();
@@ -259,7 +287,15 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to fetch transactions:', err);
     }
-  }, [adminKey]);
+  }, [adminKey, insecureMode]);
+
+  const showSecretValue = (value: string, setVisible: (visible: boolean) => void, visible: boolean) => {
+    if (!visible && isMaskedValue(value)) {
+      revealSecrets();
+      return;
+    }
+    setVisible(!visible);
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -306,7 +342,7 @@ export default function Home() {
           localStorage.setItem('vtb_admin_key', effectiveKey);
         }
         showMessage('success', 'Настройки сохранены');
-        if (!insecureMode) fetchTransactions();
+        fetchTransactions();
       } else {
         showMessage('error', `Ошибка: ${data.error}`);
       }
@@ -448,6 +484,9 @@ export default function Home() {
             <TabsTrigger value="settings" className="text-xs data-[state=active]:bg-neutral-800 data-[state=active]:text-white data-[state=active]:shadow-sm px-3 py-2">
               Платёжный шлюз
             </TabsTrigger>
+            <TabsTrigger value="logs" className="text-xs data-[state=active]:bg-neutral-800 data-[state=active]:text-white data-[state=active]:shadow-sm px-3 py-2">
+              Логи
+            </TabsTrigger>
           </TabsList>
 
           {/* =================== TAB: Integration =================== */}
@@ -484,8 +523,8 @@ export default function Home() {
                           placeholder="Сгенерируйте или задайте свой ключ"
                           className="bg-neutral-800 border-neutral-700 text-white"
                         />
-                        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowGeneratedKey(!showGeneratedKey)}>
-                          {showGeneratedKey ? 'Скрыть' : 'Показать'}
+                        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => showSecretValue(form.adminApiKey, setShowGeneratedKey, showGeneratedKey)} disabled={revealing}>
+                          {revealing && !showGeneratedKey ? '...' : showGeneratedKey ? 'Скрыть' : 'Показать'}
                         </Button>
                         <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800" onClick={() => setForm({ ...form, adminApiKey: generateRandomHex(48) })}>
                           Сгенерировать
@@ -502,8 +541,8 @@ export default function Home() {
                           placeholder="Секрет Tilda"
                           className="bg-neutral-800 border-neutral-700 text-white"
                         />
-                        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowGeneratedSecret(!showGeneratedSecret)}>
-                          {showGeneratedSecret ? 'Скрыть' : 'Показать'}
+                        <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => showSecretValue(form.tildaSecret, setShowGeneratedSecret, showGeneratedSecret)} disabled={revealing}>
+                          {revealing && !showGeneratedSecret ? '...' : showGeneratedSecret ? 'Скрыть' : 'Показать'}
                         </Button>
                         <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800" onClick={() => setForm({ ...form, tildaSecret: generateRandomHex(64) })}>
                           Сгенерировать
@@ -521,8 +560,8 @@ export default function Home() {
                             placeholder="Секрет для колбэков"
                             className="bg-neutral-800 border-neutral-700 text-white"
                           />
-                          <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => setShowWebhookSecret(!showWebhookSecret)}>
-                            {showWebhookSecret ? 'Скрыть' : 'Показать'}
+                          <Button type="button" variant="ghost" size="sm" className="shrink-0 text-xs text-neutral-400" onClick={() => showSecretValue(form.webhookSecret, setShowWebhookSecret, showWebhookSecret)} disabled={revealing}>
+                            {revealing && !showWebhookSecret ? '...' : showWebhookSecret ? 'Скрыть' : 'Показать'}
                           </Button>
                           <Button type="button" variant="outline" size="sm" className="shrink-0 text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800" onClick={() => setForm({ ...form, webhookSecret: generateRandomHex(64) })}>
                             Сгенерировать
@@ -766,9 +805,10 @@ export default function Home() {
                         variant="ghost"
                         size="sm"
                         className="shrink-0 text-xs text-neutral-400"
-                        onClick={() => setShowVtbPassword(!showVtbPassword)}
+                        onClick={() => showSecretValue(form.vtbPassword, setShowVtbPassword, showVtbPassword)}
+                        disabled={revealing}
                       >
-                        {showVtbPassword ? 'Скрыть' : 'Показать'}
+                        {revealing && !showVtbPassword ? '...' : showVtbPassword ? 'Скрыть' : 'Показать'}
                       </Button>
                       <Button
                         type="button"
@@ -850,6 +890,75 @@ export default function Home() {
                     {saving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Сохранить'}
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* =================== TAB: Logs =================== */}
+          <TabsContent value="logs">
+            <Card className="border-neutral-800 bg-neutral-900/50">
+              <CardHeader className="pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base font-semibold">Логи входящих платежей и вебхуков</CardTitle>
+                    <CardDescription className="text-xs">
+                      Последние запросы Tilda, ошибки register.do и callback-данные VTB. Секреты в payload не показываются.
+                    </CardDescription>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800" onClick={fetchTransactions}>
+                    Обновить
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {transactions.length === 0 ? (
+                  <Alert className="border-neutral-700 bg-neutral-900 text-neutral-300">
+                    <AlertTitle className="text-sm">Пока логов нет</AlertTitle>
+                    <AlertDescription className="text-xs text-neutral-500">
+                      Сделайте тестовый платёж в Tilda, затем нажмите «Обновить».
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-3">
+                    {transactions.map((tx) => (
+                      <Card key={tx.id} className="border-neutral-800 bg-neutral-950/60">
+                        <CardHeader className="pb-3">
+                          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-2">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <StatusBadge status={tx.status} />
+                                <code className="text-xs text-neutral-300">{tx.orderNumber}</code>
+                                {tx.formUrl ? (
+                                  <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs">formUrl получен</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="border-red-500/30 bg-red-500/10 text-red-400 text-xs">без formUrl</Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-neutral-500">
+                                {formatDate(tx.createdAt)} · {formatAmount(tx.amount, tx.currency)} · IP: {tx.ipAddress || '—'} · signature: {tx.signatureValid === null ? 'не проверялась' : tx.signatureValid ? 'OK' : 'FAIL'}
+                              </p>
+                            </div>
+                            <code className="text-xs text-neutral-500 break-all">orderId: {tx.orderId}</code>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <div>
+                            <p className="text-xs font-semibold text-neutral-400 mb-1">Входящий запрос / ошибка</p>
+                            <pre className="max-h-64 overflow-auto rounded-md border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300 whitespace-pre-wrap">
+                              {prettyJson(tx.requestBody)}
+                            </pre>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-neutral-400 mb-1">Callback от VTB</p>
+                            <pre className="max-h-64 overflow-auto rounded-md border border-neutral-800 bg-neutral-950 p-3 text-xs text-neutral-300 whitespace-pre-wrap">
+                              {prettyJson(tx.callbackData)}
+                            </pre>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

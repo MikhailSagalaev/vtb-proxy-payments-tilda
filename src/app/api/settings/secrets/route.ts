@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConfig } from '@/lib/vtb';
-import { verifyAdminKey, checkRateLimit, getClientIp, RATE_LIMIT_MAX_ADMIN } from '@/lib/security';
+import { verifyAdminKey, checkRateLimit, getClientIp, RATE_LIMIT_MAX_ADMIN, isInsecureMode } from '@/lib/security';
 
 export async function GET(request: NextRequest) {
   const clientIp = getClientIp(request);
@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Safe default: never expose secrets unless explicitly enabled on server.
-    const allow = (process.env.ALLOW_SECRET_READ || '').toLowerCase() === 'true';
+    // In insecure test mode, allow reveal so the one-page setup is debuggable.
+    const allow = isInsecureMode() || (process.env.ALLOW_SECRET_READ || '').toLowerCase() === 'true';
     if (!allow) {
       return NextResponse.json(
         { error: 'Secret reveal is disabled. Set ALLOW_SECRET_READ=true on server to enable.' },
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
       vtbPassword: config.vtbPassword || '',
       tildaSecret: config.tildaSecret || '',
       webhookSecret: config.webhookSecret || '',
+      adminApiKey: config.adminApiKey || '',
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

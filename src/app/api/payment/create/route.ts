@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { registerOrder, getConfig, extractTildaParams, logRequest } from '@/lib/vtb';
 import { db } from '@/lib/db';
-import { verifyTildaSignature, checkRateLimit, getClientIp, isInsecureMode } from '@/lib/security';
+import { verifyTildaSignature, checkRateLimit, getClientIp, isInsecureMode, sanitizeOrderId } from '@/lib/security';
 import { errorToMeta, getRequestId, logRequest as logReq } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -108,15 +108,41 @@ export async function POST(request: NextRequest) {
     const returnUrl = config.successUrl || `${baseUrl}/payment/success`;
     const failUrl = config.failUrl || `${baseUrl}/payment/fail`;
 
-    const result = await registerOrder({
-      amount,
-      currency: config.currency,
-      orderNumber: paymentId,
-      description: subject,
-      returnUrl,
-      failUrl,
-      language: config.language,
-    });
+    let result: Awaited<ReturnType<typeof registerOrder>>;
+    try {
+      result = await registerOrder({
+        amount,
+        currency: config.currency,
+        orderNumber: paymentId,
+        description: subject,
+        returnUrl,
+        failUrl,
+        language: config.language,
+      });
+    } catch (error) {
+      const failureOrderId = `failed_${sanitizeOrderId(paymentId)}_${Date.now()}`;
+      await db.paymentTransaction.create({
+        data: {
+          orderId: failureOrderId.slice(0, 128),
+          orderNumber: paymentId,
+          amount,
+          currency: config.currency,
+          formUrl: null,
+          status: 6,
+          tildaPaymentId: paymentId,
+          requestBody: JSON.stringify({
+            source: 'tilda_create',
+            params: allParams,
+            registerRequest: { returnUrl, failUrl, language: config.language, currency: config.currency },
+            error: errorToMeta(error),
+          }),
+          ipAddress: clientIp,
+          signatureValid,
+        },
+      });
+      logReq('error', requestId, 'Failed create saved to transaction log', { clientIp, paymentId, failureOrderId, ...errorToMeta(error) }, false);
+      throw error;
+    }
     logReq('info', requestId, 'VTB order registered', { clientIp, paymentId, orderId: result.orderId }, false);
 
     // Save transaction
