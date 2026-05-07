@@ -7,7 +7,7 @@ import {
   getClientIp,
   maskSensitive,
 } from '@/lib/security';
-import { getRequestId, logRequest } from '@/lib/logger';
+import { getRequestId, logRequest as logReq } from '@/lib/logger';
 
 // ==============================
 // Types
@@ -139,7 +139,7 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
 
   try {
     const requestId = getRequestId();
-    logRequest('info', requestId, 'VTB register.do request', maskSensitive({
+    logReq('info', requestId, 'VTB register.do request', maskSensitive({
       gatewayUrl,
       userName: config.vtbUserName,
       amount: String(params.amount),
