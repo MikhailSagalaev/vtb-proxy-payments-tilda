@@ -108,8 +108,8 @@ export async function POST(request: NextRequest) {
       successUrl: config.successUrl,
       failUrl: config.failUrl,
       tildaCallbackUrl: config.tildaCallbackUrl,
-      hasVtbPassword: Boolean(config.vtbPassword),
-      vtbPasswordLength: config.vtbPassword.length,
+      vtbApiCredentialPresent: Boolean(config.vtbPassword),
+      vtbApiCredentialLength: config.vtbPassword.length,
       hasTildaSecret: Boolean(config.tildaSecret),
       hasAdminApiKey: Boolean(config.adminApiKey),
     }, false);

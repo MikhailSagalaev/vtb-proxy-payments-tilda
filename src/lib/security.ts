@@ -213,11 +213,15 @@ export function getClientIp(request: Request): string {
 // Safe Logging (mask secrets)
 // ==============================
 
-export function maskSensitive(data: Record<string, string>, sensitiveKeys: string[] = ['password', 'secret', 'token']): Record<string, string> {
-  const masked: Record<string, string> = {};
+export function maskSensitive(data: Record<string, unknown>, sensitiveKeys: string[] = ['password', 'secret', 'token']): Record<string, unknown> {
+  const masked: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     if (sensitiveKeys.some((k) => key.toLowerCase().includes(k))) {
-      masked[key] = value ? `${value.slice(0, 3)}***` : '';
+      if (typeof value === 'string') {
+        masked[key] = value ? `${value.slice(0, 3)}***` : '';
+      } else {
+        masked[key] = value == null ? value : '***';
+      }
     } else {
       masked[key] = value;
     }

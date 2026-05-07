@@ -97,11 +97,15 @@ describe('Security Library', () => {
         public_id: '123',
         password: 'my-secret-password',
         tildaSecret: 'very-secret',
+        passwordPresent: true,
+        passwordLength: 9,
       };
       const masked = maskSensitive(data);
       expect(masked.public_id).toBe('123');
       expect(masked.password).toBe('my-***');
       expect(masked.tildaSecret).toBe('ver***');
+      expect(masked.passwordPresent).toBe('***');
+      expect(masked.passwordLength).toBe('***');
     });
   });
 });

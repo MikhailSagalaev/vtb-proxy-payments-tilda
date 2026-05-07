@@ -142,8 +142,8 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
     logReq('info', requestId, 'VTB register.do request', maskSensitive({
       gatewayUrl,
       userName: config.vtbUserName,
-      passwordPresent: Boolean(config.vtbPassword),
-      passwordLength: config.vtbPassword.length,
+      apiCredentialPresent: Boolean(config.vtbPassword),
+      apiCredentialLength: config.vtbPassword.length,
       amount: String(params.amount),
       currency: params.currency || config.currency,
       orderNumber: sanitizeOrderId(params.orderNumber),

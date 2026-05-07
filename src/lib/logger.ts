@@ -30,7 +30,7 @@ export function logRequest(
   meta?: Record<string, unknown>,
   mask: boolean = true
 ) {
-  const safeMeta = meta && mask ? maskSensitive(meta as Record<string, string>) : meta;
+  const safeMeta = meta && mask ? maskSensitive(meta) : meta;
   log(level, `[req:${requestId}] ${message}`, safeMeta);
 }
 
