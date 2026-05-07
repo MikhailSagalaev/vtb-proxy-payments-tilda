@@ -7,6 +7,7 @@ import {
   getClientIp,
   maskSensitive,
 } from '@/lib/security';
+import { getRequestId, logRequest } from '@/lib/logger';
 
 // ==============================
 // Types
@@ -137,6 +138,18 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
+    const requestId = getRequestId();
+    logRequest('info', requestId, 'VTB register.do request', maskSensitive({
+      gatewayUrl,
+      userName: config.vtbUserName,
+      amount: String(params.amount),
+      currency: params.currency || config.currency,
+      orderNumber: sanitizeOrderId(params.orderNumber),
+      returnUrl: params.returnUrl || '',
+      failUrl: params.failUrl || '',
+      language: params.language || config.language,
+    } as any), true);
+
     const response = await fetch(`${gatewayUrl}/register.do`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
