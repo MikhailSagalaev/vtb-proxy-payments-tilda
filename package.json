@@ -5,12 +5,13 @@
   "description": "Прокси-сервер для интеграции VTB Bank Kazakhstan с платёжной системой Tilda",
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "next build && npm run standalone:prepare",
     "start": "node .next/standalone/server.js || node ../.next/standalone/server.js",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "setup": "npx prisma generate && npx prisma db push",
+    "standalone:prepare": "node scripts/standalone-prepare.mjs",
     "test": "jest"
   },
   "dependencies": {

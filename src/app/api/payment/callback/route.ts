@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { sendTildaNotification } from '@/lib/vtb';
+import { sendTildaNotification, getOrderStatus } from '@/lib/vtb';
 import { verifyWebhookSignature, checkRateLimit, getClientIp } from '@/lib/security';
 
 // Sentinel value stored in callbackData to indicate Tilda was already notified
@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
     });
 
     const orderId = callbackData['mdOrder'] || callbackData['orderNumber'] || '';
-    const orderStatus = parseInt(callbackData['orderStatus'] || '0');
+    const reportedStatus = parseInt(callbackData['orderStatus'] || '0');
 
-    console.log(`[${new Date().toISOString()}] VTB KZ Callback from ${clientIp}: order=${orderId} status=${orderStatus}`);
+    console.log(`[${new Date().toISOString()}] VTB KZ Callback from ${clientIp}: order=${orderId} reportedStatus=${reportedStatus}`);
 
     // Verify webhook signature if webhookSecret is configured
     const config = await db.paymentConfig.findUnique({ where: { id: 'default' } });
@@ -51,6 +51,22 @@ export async function POST(request: NextRequest) {
       return new NextResponse('OK', { status: 200 });
     }
 
+    // Source of truth: confirm actual payment status in VTB.
+    // Callback payload should not be trusted (it can be spoofed if unsigned).
+    let confirmedStatus: number | null = null;
+    try {
+      const vtbStatus = await getOrderStatus(orderId);
+      confirmedStatus = typeof (vtbStatus as any)?.orderStatus === 'number'
+        ? (vtbStatus as any).orderStatus
+        : parseInt(String((vtbStatus as any)?.orderStatus ?? 'NaN'));
+    } catch (e) {
+      console.error(`[${new Date().toISOString()}] Failed to confirm VTB status for order ${orderId}:`, e);
+      // Return OK so VTB doesn't retry forever; we'll keep the callback data for later reconciliation.
+    }
+
+    const effectiveStatus = Number.isFinite(confirmedStatus as number) ? (confirmedStatus as number) : transaction.status;
+    const isPaid = effectiveStatus === 2;
+
     // Parse existing callback metadata (may contain TILDA_NOTIFIED_KEY)
     let existingMeta: Record<string, string> = {};
     try {
@@ -59,31 +75,26 @@ export async function POST(request: NextRequest) {
       }
     } catch {/* ignore parse errors */}
 
-    // Prevent status downgrade (e.g., paid → not paid)
-    const currentStatus = transaction.status;
-    const shouldUpdateStatus = orderStatus === 2 || (orderStatus !== 2 && currentStatus !== 2);
-
-    const isPaid = orderStatus === 2;
-
     // Idempotency: check if we already sent Tilda notification for a successful payment
     const alreadyNotifiedSuccess = existingMeta[TILDA_NOTIFIED_KEY] === 'success';
     const shouldNotifyTilda = isPaid ? !alreadyNotifiedSuccess : true;
 
     // Update transaction record
-    if (shouldUpdateStatus) {
-      const newMeta = {
-        ...callbackData,
-        ...(alreadyNotifiedSuccess ? { [TILDA_NOTIFIED_KEY]: 'success' } : {}),
-      };
+    const newMeta = {
+      ...existingMeta,
+      ...callbackData,
+      reportedStatus: String(reportedStatus),
+      ...(confirmedStatus !== null ? { confirmedStatus: String(confirmedStatus) } : {}),
+      ...(alreadyNotifiedSuccess ? { [TILDA_NOTIFIED_KEY]: 'success' } : {}),
+    };
 
-      await db.paymentTransaction.update({
-        where: { id: transaction.id },
-        data: {
-          status: orderStatus,
-          callbackData: JSON.stringify(newMeta),
-        },
-      });
-    }
+    await db.paymentTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        status: effectiveStatus,
+        callbackData: JSON.stringify(newMeta),
+      },
+    });
 
     // Forward notification to Tilda (with retry)
     if (shouldNotifyTilda) {
@@ -99,7 +110,7 @@ export async function POST(request: NextRequest) {
 
         // Mark as notified to prevent duplicate success notifications
         if (isPaid) {
-          const finalMeta = { ...callbackData, [TILDA_NOTIFIED_KEY]: 'success' };
+          const finalMeta = { ...newMeta, [TILDA_NOTIFIED_KEY]: 'success' };
           await db.paymentTransaction.update({
             where: { id: transaction.id },
             data: { callbackData: JSON.stringify(finalMeta) },
