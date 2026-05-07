@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { sendTildaNotification, getOrderStatus } from '@/lib/vtb';
-import { verifyWebhookSignature, checkRateLimit, getClientIp } from '@/lib/security';
+import { verifyWebhookSignature, checkRateLimit, getClientIp, isInsecureMode } from '@/lib/security';
+import { errorToMeta, getRequestId, logRequest } from '@/lib/logger';
 
 // Sentinel value stored in callbackData to indicate Tilda was already notified
 const TILDA_NOTIFIED_KEY = '__tilda_notified__';
 
 export async function POST(request: NextRequest) {
   const clientIp = getClientIp(request);
+  const requestId = getRequestId(request.headers);
 
   try {
+    logRequest('info', requestId, 'POST /api/payment/callback', { clientIp, insecureMode: isInsecureMode() }, false);
     // Rate limiting (higher limit for callbacks - VTB may retry)
     const { allowed } = await checkRateLimit(clientIp, 'payment_callback', 100);
     if (!allowed) {
+      logRequest('warn', requestId, 'Rate limit exceeded on payment_callback', { clientIp }, false);
       return new NextResponse('Rate limit exceeded', { status: 429 });
     }
 
@@ -27,7 +31,7 @@ export async function POST(request: NextRequest) {
     const orderId = callbackData['mdOrder'] || callbackData['orderNumber'] || '';
     const reportedStatus = parseInt(callbackData['orderStatus'] || '0');
 
-    console.log(`[${new Date().toISOString()}] VTB KZ Callback from ${clientIp}: order=${orderId} reportedStatus=${reportedStatus}`);
+    logRequest('info', requestId, 'VTB callback received', { clientIp, orderId, reportedStatus }, false);
 
     // Verify webhook signature if webhookSecret is configured
     const config = await db.paymentConfig.findUnique({ where: { id: 'default' } });
@@ -35,7 +39,7 @@ export async function POST(request: NextRequest) {
       const signatureHeader = request.headers.get('x-signature') || '';
       const isValid = verifyWebhookSignature(rawBody, config.webhookSecret, signatureHeader);
       if (!isValid) {
-        console.warn(`[${new Date().toISOString()}] INVALID WEBHOOK SIGNATURE from ${clientIp}`);
+        logRequest('warn', requestId, 'Invalid webhook signature', { clientIp, orderId }, false);
         return new NextResponse('Invalid signature', { status: 403 });
       }
     }
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!transaction) {
-      console.warn(`[${new Date().toISOString()}] Unknown order in callback: ${orderId}`);
+      logRequest('warn', requestId, 'Unknown order in callback', { clientIp, orderId }, false);
       // Still return OK — don't make VTB retry forever for unknown orders
       return new NextResponse('OK', { status: 200 });
     }
@@ -60,7 +64,7 @@ export async function POST(request: NextRequest) {
         ? (vtbStatus as any).orderStatus
         : parseInt(String((vtbStatus as any)?.orderStatus ?? 'NaN'));
     } catch (e) {
-      console.error(`[${new Date().toISOString()}] Failed to confirm VTB status for order ${orderId}:`, e);
+      logRequest('error', requestId, 'Failed to confirm VTB status', { clientIp, orderId, ...errorToMeta(e) }, false);
       // Return OK so VTB doesn't retry forever; we'll keep the callback data for later reconciliation.
     }
 
@@ -95,6 +99,7 @@ export async function POST(request: NextRequest) {
         callbackData: JSON.stringify(newMeta),
       },
     });
+    logRequest('info', requestId, 'Transaction updated from callback', { clientIp, orderId, effectiveStatus, isPaid }, false);
 
     // Forward notification to Tilda (with retry)
     if (shouldNotifyTilda) {
@@ -106,7 +111,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (result.ok) {
-        console.log(`[${new Date().toISOString()}] Tilda notification sent (attempt ${result.attempts}) for order ${orderId} (status: ${isPaid ? 'SUCCESS' : 'FAILURE'})`);
+        logRequest('info', requestId, 'Tilda notification sent', { clientIp, orderId, isPaid, attempts: result.attempts }, false);
 
         // Mark as notified to prevent duplicate success notifications
         if (isPaid) {
@@ -117,19 +122,19 @@ export async function POST(request: NextRequest) {
           });
         }
       } else {
-        console.error(`[${new Date().toISOString()}] Tilda notification FAILED for order ${orderId} after ${result.attempts} attempts:`, result.error);
+        logRequest('error', requestId, 'Tilda notification failed', { clientIp, orderId, attempts: result.attempts, error: result.error }, false);
         // We return OK to VTB so it doesn't retry — the payment is recorded in DB
         // Manual reconciliation may be needed for failed Tilda notifications
       }
     } else {
-      console.log(`[${new Date().toISOString()}] Skipping duplicate Tilda notification for order ${orderId} (already notified)`);
+      logRequest('info', requestId, 'Skipping duplicate Tilda success notification', { clientIp, orderId }, false);
     }
 
     // VTB KZ expects OK response
     return new NextResponse('OK', { status: 200 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[ERROR] /api/payment/callback from ${clientIp}:`, message);
+    logRequest('error', requestId, 'POST /api/payment/callback failed', { clientIp, ...errorToMeta(error) }, false);
     return new NextResponse('ERROR', { status: 500 });
   }
 }

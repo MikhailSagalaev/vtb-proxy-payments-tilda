@@ -2,14 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { registerOrder, getConfig, extractTildaParams, logRequest } from '@/lib/vtb';
 import { db } from '@/lib/db';
 import { verifyTildaSignature, checkRateLimit, getClientIp, isInsecureMode } from '@/lib/security';
+import { errorToMeta, getRequestId, logRequest as logReq } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   const clientIp = getClientIp(request);
+  const requestId = getRequestId(request.headers);
 
   try {
+    logReq('info', requestId, 'POST /api/payment/create', { clientIp, insecureMode: isInsecureMode() }, false);
     // Rate limiting
     const { allowed } = await checkRateLimit(clientIp, 'payment_create');
     if (!allowed) {
+      logReq('warn', requestId, 'Rate limit exceeded on payment_create', { clientIp }, false);
       return NextResponse.json(
         { success: false, error: 'Rate limit exceeded' },
         { status: 429 }
@@ -20,9 +24,11 @@ export async function POST(request: NextRequest) {
     const { amount, paymentId, subject, allParams, signature } = extractTildaParams(formData);
 
     logRequest(clientIp, '/api/payment/create', allParams);
+    logReq('info', requestId, 'Parsed tilda params', { clientIp, paymentId, hasSignature: !!signature }, false);
 
     // Validate required fields
     if (amount === null) {
+      logReq('warn', requestId, 'Invalid amount', { clientIp, paymentId }, false);
       return NextResponse.json(
         { success: false, error: 'Invalid or missing payment_amount' },
         { status: 400 }
@@ -30,6 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!paymentId) {
+      logReq('warn', requestId, 'Missing payment_id', { clientIp }, false);
       return NextResponse.json(
         { success: false, error: 'Missing payment_id' },
         { status: 400 }
@@ -47,6 +54,7 @@ export async function POST(request: NextRequest) {
       if (!signature) {
         // Secret is configured but no signature provided — reject
         console.warn(`[${new Date().toISOString()}] MISSING SIGNATURE from ${clientIp} for order ${paymentId} (secret is configured)`);
+        logReq('warn', requestId, 'Signature required but missing', { clientIp, paymentId }, false);
         return NextResponse.json(
           { success: false, error: 'Signature required' },
           { status: 403 }
@@ -62,6 +70,7 @@ export async function POST(request: NextRequest) {
 
       if (!isValid) {
         console.warn(`[${new Date().toISOString()}] INVALID SIGNATURE from ${clientIp} for order ${paymentId}`);
+        logReq('warn', requestId, 'Invalid signature', { clientIp, paymentId }, false);
         return NextResponse.json(
           { success: false, error: 'Invalid signature' },
           { status: 403 }
@@ -80,6 +89,7 @@ export async function POST(request: NextRequest) {
     if (existing?.formUrl) {
       // Already registered — return the existing payment URL (idempotent)
       console.log(`[${new Date().toISOString()}] Idempotent request for order ${paymentId} → reusing ${existing.orderId}`);
+      logReq('info', requestId, 'Idempotent create: reusing formUrl', { clientIp, paymentId, orderId: existing.orderId }, false);
       const html = buildRedirectHtml(existing.formUrl);
       return new NextResponse(html, {
         status: 200,
@@ -100,6 +110,7 @@ export async function POST(request: NextRequest) {
       failUrl,
       language: config.language,
     });
+    logReq('info', requestId, 'VTB order registered', { clientIp, paymentId, orderId: result.orderId }, false);
 
     // Save transaction
     await db.paymentTransaction.create({
@@ -118,6 +129,7 @@ export async function POST(request: NextRequest) {
     });
 
     console.log(`[${new Date().toISOString()}] Order registered: ${paymentId} → VTB ${result.orderId}`);
+    logReq('info', requestId, 'Transaction saved', { clientIp, paymentId, orderId: result.orderId }, false);
 
     const html = buildRedirectHtml(result.formUrl);
     return new NextResponse(html, {
@@ -127,6 +139,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[ERROR] /api/payment/create from ${clientIp}:`, message);
+    logReq('error', requestId, 'POST /api/payment/create failed', { clientIp, ...errorToMeta(error) }, false);
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Payment Error</title></head>
 <body><div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#333">
