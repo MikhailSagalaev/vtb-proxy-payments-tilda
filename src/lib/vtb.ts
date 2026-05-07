@@ -82,9 +82,13 @@ export async function updateConfig(data: Record<string, unknown>) {
     'tildaCallbackUrl', 'tildaSecret', 'webhookSecret', 'adminApiKey',
     'successUrl', 'failUrl', 'isTestMode',
   ];
+  const secretFields = new Set(['vtbPassword', 'tildaSecret', 'webhookSecret', 'adminApiKey']);
   const filtered: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
     if (allowed.includes(key)) {
+      if (secretFields.has(key) && typeof value === 'string' && value.includes('•')) {
+        continue;
+      }
       filtered[key] = value;
     }
   }

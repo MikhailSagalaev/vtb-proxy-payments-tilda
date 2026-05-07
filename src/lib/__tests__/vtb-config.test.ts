@@ -54,5 +54,24 @@ describe('vtb.updateConfig', () => {
     expect((result as any).randomField).toBeUndefined();
     expect((result as any).callbackData).toBeUndefined();
   });
+
+  it('should not persist masked secret placeholders', async () => {
+    const result = await updateConfig({
+      vtbUserName: 'updated-user',
+      vtbPassword: '••••••••',
+      tildaSecret: '••••••••',
+      webhookSecret: '••••••••',
+      adminApiKey: '••••••••',
+    } as any);
+
+    expect(result).toMatchObject({
+      id: 'default',
+      vtbUserName: 'updated-user',
+    });
+    expect((result as any).vtbPassword).toBeUndefined();
+    expect((result as any).tildaSecret).toBeUndefined();
+    expect((result as any).webhookSecret).toBeUndefined();
+    expect((result as any).adminApiKey).toBeUndefined();
+  });
 });
 

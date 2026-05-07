@@ -208,20 +208,20 @@ export default function Home() {
       const insecure = !!data?.insecureMode;
       setInsecureMode(insecure);
       setConfig(data);
-      setForm({
+      setForm((prev) => ({
         vtbUserName: data.vtbUserName || '',
-        vtbPassword: data.vtbPassword || '',
+        vtbPassword: isMaskedValue(data.vtbPassword || '') && prev.vtbPassword && !isMaskedValue(prev.vtbPassword) ? prev.vtbPassword : data.vtbPassword || '',
         gatewayUrl: data.gatewayUrl || '',
         currency: data.currency || '398',
         language: data.language || 'ru',
         tildaCallbackUrl: data.tildaCallbackUrl || '',
-        tildaSecret: data.tildaSecret || '',
-        webhookSecret: data.webhookSecret || '',
-        adminApiKey: data.adminApiKey || '',
+        tildaSecret: isMaskedValue(data.tildaSecret || '') && prev.tildaSecret && !isMaskedValue(prev.tildaSecret) ? prev.tildaSecret : data.tildaSecret || '',
+        webhookSecret: isMaskedValue(data.webhookSecret || '') && prev.webhookSecret && !isMaskedValue(prev.webhookSecret) ? prev.webhookSecret : data.webhookSecret || '',
+        adminApiKey: isMaskedValue(data.adminApiKey || '') && prev.adminApiKey && !isMaskedValue(prev.adminApiKey) ? prev.adminApiKey : data.adminApiKey || '',
         successUrl: data.successUrl || '',
         failUrl: data.failUrl || '',
         isTestMode: data.isTestMode ?? true,
-      });
+      }));
       // If admin API key exists, show the auth field
       if (data.adminApiKey && data.adminApiKey !== '••••••••') {
         setAdminAuthenticated(true);
@@ -331,7 +331,12 @@ export default function Home() {
           'Content-Type': 'application/json',
           ...(insecureMode ? {} : { 'Authorization': `Bearer ${effectiveKey}` }),
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(Object.fromEntries(
+          Object.entries(form).filter(([key, value]) => {
+            const secretFields = ['vtbPassword', 'tildaSecret', 'webhookSecret', 'adminApiKey'];
+            return !(secretFields.includes(key) && typeof value === 'string' && isMaskedValue(value));
+          })
+        )),
       });
       const data = await res.json();
       if (data.success) {
