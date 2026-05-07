@@ -182,7 +182,11 @@ export default function Home() {
 
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch('/api/settings');
+      const headers: HeadersInit = {};
+      if (adminKey && isValidHeaderValue(adminKey)) {
+        headers['Authorization'] = `Bearer ${adminKey}`;
+      }
+      const res = await fetch('/api/settings', { headers });
       const data = await res.json();
       setConfig(data);
       setForm({
@@ -206,7 +210,7 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to fetch config:', err);
     }
-  }, []);
+  }, [adminKey]);
 
   const revealSecrets = useCallback(async () => {
     if (!adminKey || !isValidHeaderValue(adminKey)) {
@@ -266,26 +270,30 @@ export default function Home() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (!adminKey) {
-        showMessage('error', 'Введите Admin API Key для сохранения настроек');
+      const isFirstSetup = (config as any)?.firstSetup === true;
+      const effectiveKey = adminKey || (isFirstSetup ? (form.adminApiKey || '') : '');
+
+      if (!effectiveKey) {
+        showMessage('error', 'Введите Admin API Key (на вкладке «Безопасность» можно сгенерировать)');
         setSaving(false);
         return;
       }
-      if (!isValidHeaderValue(adminKey)) {
+      if (!isValidHeaderValue(effectiveKey)) {
         showMessage('error', 'Admin API Key должен содержать только латинские символы, цифры и спецсимволы (без кириллицы)');
         setSaving(false);
         return;
       }
       const res = await fetch('/api/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${effectiveKey}` },
         body: JSON.stringify(form),
       });
       const data = await res.json();
       if (data.success) {
         setConfig(data.config);
         setAdminAuthenticated(true);
-        localStorage.setItem('vtb_admin_key', adminKey);
+        setAdminKey(effectiveKey);
+        localStorage.setItem('vtb_admin_key', effectiveKey);
         showMessage('success', 'Настройки сохранены');
         fetchTransactions();
       } else {
