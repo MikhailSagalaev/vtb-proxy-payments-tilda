@@ -105,6 +105,13 @@ export async function updateConfig(data: Record<string, unknown>) {
 
 export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegisterResponse> {
   const config = await getConfig();
+  if ((process.env.MOCK_VTB || '').toLowerCase() === 'true') {
+    const orderNumber = sanitizeOrderId(params.orderNumber);
+    return {
+      orderId: `mock_${orderNumber}_${Date.now()}`,
+      formUrl: `https://mock-vtb.local/pay?orderNumber=${encodeURIComponent(orderNumber)}`,
+    };
+  }
   const gatewayUrl = config.gatewayUrl.replace(/\/$/, '');
 
   const formData = new URLSearchParams({
@@ -142,6 +149,9 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
     if (data.error) {
       throw new Error(data.errorMessage || `VTB error: ${data.error}`);
     }
+    if (!data.orderId || !data.formUrl) {
+      throw new Error('VTB response missing orderId/formUrl');
+    }
 
     return {
       orderId: data.orderId,
@@ -154,6 +164,15 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
 
 export async function getOrderStatus(orderId: string): Promise<VTBStatusResponse> {
   const config = await getConfig();
+  if ((process.env.MOCK_VTB || '').toLowerCase() === 'true') {
+    return {
+      orderNumber: sanitizeOrderId(orderId),
+      orderStatus: 2,
+      amount: 1000,
+      actionCode: 0,
+      actionCodeDescription: 'MOCK OK',
+    };
+  }
   const gatewayUrl = config.gatewayUrl.replace(/\/$/, '');
 
   const formData = new URLSearchParams({

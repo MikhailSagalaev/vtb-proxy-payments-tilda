@@ -153,7 +153,10 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [revealing, setRevealing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [adminKey, setAdminKey] = useState('');
+  const [adminKey, setAdminKey] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('vtb_admin_key') || '';
+  });
   const [adminAuthenticated, setAdminAuthenticated] = useState(false);
   const [showAdminKey, setShowAdminKey] = useState(false);
   const [showGeneratedKey, setShowGeneratedKey] = useState(false);
@@ -166,14 +169,6 @@ export default function Home() {
     tildaCallbackUrl: '', tildaSecret: '', webhookSecret: '', adminApiKey: '',
     successUrl: '', failUrl: '', isTestMode: true,
   });
-
-  // Restore admin key from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('vtb_admin_key');
-    if (saved) {
-      setAdminKey(saved);
-    }
-  }, []);
 
   // Validate that string is safe for HTTP headers (ASCII only)
   const isValidHeaderValue = (value: string): boolean => {
@@ -259,10 +254,12 @@ export default function Home() {
   }, [adminKey]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchConfig().finally(() => setLoading(false));
   }, [fetchConfig]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (adminAuthenticated) fetchTransactions();
   }, [adminAuthenticated, fetchTransactions]);
 
