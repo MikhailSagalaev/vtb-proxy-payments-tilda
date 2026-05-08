@@ -187,16 +187,18 @@ export async function POST(request: NextRequest) {
 }
 
 function buildRedirectHtml(formUrl: string): string {
-  // Tilda Universal Payment format: return HTML page that auto-submits to payment URL
+  // Tilda Universal Payment format: return HTML page that redirects to payment URL.
+  // Using window.location is more robust than an empty GET form in some embedded contexts.
+  const safeUrl = JSON.stringify(formUrl);
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Redirecting to payment...</title></head>
-<body>
-<form id="paymentForm" method="GET" action="${formUrl}">
-</form>
-<script>document.getElementById('paymentForm').submit();</script>
-<noscript>
-<p>Redirecting to payment page...</p>
-<a href="${formUrl}">Click here if not redirected automatically</a>
-</noscript>
+<body style="font-family:sans-serif;padding:24px;color:#111">
+<h3>Redirecting to payment page...</h3>
+<p>If you are not redirected automatically, open this link:</p>
+<p><a id="payLink" href="${formUrl}">${formUrl}</a></p>
+<script>
+  const url = ${safeUrl};
+  try { window.location.replace(url); } catch (e) { window.location.href = url; }
+</script>
 </body></html>`;
 }
