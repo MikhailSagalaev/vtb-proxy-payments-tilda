@@ -13,6 +13,19 @@ export default function ReturnClient(props: { status: 'success' | 'fail'; title:
     return u;
   }, [props.status]);
 
+  const nextUrl = useMemo(() => {
+    if (!url) return null;
+    const rawNext = url.searchParams.get('next');
+    if (!rawNext) return null;
+    try {
+      const parsed = new URL(rawNext);
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return parsed.toString();
+      return null;
+    } catch {
+      return null;
+    }
+  }, [url]);
+
   useEffect(() => {
     if (!url) return;
     const apiUrl = new URL('/api/payment/return', url.origin);
@@ -26,6 +39,15 @@ export default function ReturnClient(props: { status: 'success' | 'fail'; title:
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Unknown error'));
   }, [url]);
+
+  useEffect(() => {
+    if (!nextUrl) return;
+    if (!result || error) return;
+    const t = setTimeout(() => {
+      window.location.href = nextUrl;
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [nextUrl, result, error]);
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -48,6 +70,14 @@ export default function ReturnClient(props: { status: 'success' | 'fail'; title:
             <div style={{ marginBottom: 6 }}>orderId: <code>{result.orderId}</code></div>
             <div style={{ marginBottom: 6 }}>paid: <code>{String(result.isPaid)}</code></div>
             <div>status: <code>{String(result.effectiveStatus)}</code></div>
+          </div>
+        )}
+
+        {nextUrl && !error && (
+          <div style={{ marginTop: 14, color: '#9ca3af', fontSize: 13 }}>
+            Перенаправление на сайт… Если не сработало:
+            {' '}
+            <a href={nextUrl} style={{ color: '#34d399', textDecoration: 'none' }}>открыть страницу</a>
           </div>
         )}
 
