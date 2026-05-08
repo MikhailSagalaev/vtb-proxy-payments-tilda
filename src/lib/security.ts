@@ -19,13 +19,19 @@ export function generateTildaSignature(
   secret: string,
   excludedKeys: string[] = ['signature']
 ): string {
+  // Tilda delimiter varies by gateway template settings.
+  // Default is empty string (most common in custom templates).
+  // Override via env: TILDA_SIGNATURE_DELIMITER="\n" (two chars) to use newline.
+  const rawDelimiter = process.env.TILDA_SIGNATURE_DELIMITER ?? '';
+  const delimiter = rawDelimiter === '\\n' ? '\n' : rawDelimiter;
+
   const filteredKeys = Object.keys(params)
     .filter((k) => !excludedKeys.includes(k) && params[k] !== undefined && params[k] !== '')
     .sort();
 
   const stringToSign = filteredKeys
     .map((k) => String(params[k]))
-    .join('\n');
+    .join(delimiter);
 
   return createHmac('sha256', secret).update(stringToSign).digest('hex');
 }
