@@ -3,6 +3,7 @@ import {
   generateTildaSignature,
   parseAmount,
   sanitizeString,
+  sanitizeCustomerEmail,
   sanitizeOrderId,
   getClientIp,
   maskSensitive,
@@ -18,6 +19,8 @@ interface VTBRegisterParams {
   currency: string;
   orderNumber: string;
   description?: string;
+  /** Buyer email — forwarded to register.do as `email` when supported by the gateway. */
+  email?: string;
   returnUrl?: string;
   failUrl?: string;
   language?: string;
@@ -138,6 +141,15 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
     formData.append('description', sanitizeString(params.description));
   }
 
+  if (params.email) {
+    const email = sanitizeCustomerEmail(params.email);
+    if (email) {
+      formData.append('email', email);
+      // Some RBS-based gateways surface buyer email in the merchant UI only via jsonParams.
+      formData.append('jsonParams', JSON.stringify({ email }));
+    }
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
@@ -151,6 +163,7 @@ export async function registerOrder(params: VTBRegisterParams): Promise<VTBRegis
       amount: String(params.amount),
       currency: params.currency || config.currency,
       orderNumber: sanitizeOrderId(params.orderNumber),
+      customerEmailPresent: Boolean(params.email && sanitizeCustomerEmail(params.email)),
       returnUrl: params.returnUrl || '',
       failUrl: params.failUrl || '',
       language: params.language || config.language,

@@ -165,6 +165,48 @@ export function sanitizeString(input: string): string {
     .slice(0, 1000); // Limit length
 }
 
+const CUSTOMER_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Trim, strip control chars, cap length — do not HTML-escape (would break email). */
+export function sanitizeCustomerEmail(input: string): string {
+  return input
+    .trim()
+    .replace(/[\r\n\x00-\x1f]/g, '')
+    .slice(0, 254);
+}
+
+export function isValidCustomerEmail(input: string): boolean {
+  const s = sanitizeCustomerEmail(input);
+  return s.length > 3 && s.length <= 254 && CUSTOMER_EMAIL_RE.test(s);
+}
+
+/**
+ * Read buyer email from Tilda POST fields (add the field in «дополнительные поля» with a name containing email, e.g. Email).
+ */
+export function extractCustomerEmail(params: Record<string, string>): string | undefined {
+  const preferredKeys = [
+    'email',
+    'Email',
+    'EMAIL',
+    'customer_email',
+    'CustomerEmail',
+    'payment_email',
+    'E-mail',
+    'contact_email',
+    'user_email',
+    'buyer_email',
+  ];
+  for (const key of preferredKeys) {
+    const v = params[key];
+    if (v && isValidCustomerEmail(v)) return sanitizeCustomerEmail(v);
+  }
+  for (const [key, v] of Object.entries(params)) {
+    if (!v) continue;
+    if (/email/i.test(key) && isValidCustomerEmail(v)) return sanitizeCustomerEmail(v);
+  }
+  return undefined;
+}
+
 export function sanitizeOrderId(input: string): string {
   return input.replace(/[^a-zA-Z0-9\-_.]/g, '').slice(0, 64);
 }

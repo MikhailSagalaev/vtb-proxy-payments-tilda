@@ -7,6 +7,8 @@ import {
   sanitizeOrderId,
   parseAmount,
   maskSensitive,
+  extractCustomerEmail,
+  isValidCustomerEmail,
 } from '../security';
 
 describe('Security Library', () => {
@@ -73,6 +75,21 @@ describe('Security Library', () => {
     it('should sanitize order IDs', () => {
       expect(sanitizeOrderId('order-123!@#')).toBe('order-123');
       expect(sanitizeOrderId('test_order.456')).toBe('test_order.456');
+    });
+  });
+
+  describe('Customer email from Tilda params', () => {
+    it('extracts standard Email field', () => {
+      expect(extractCustomerEmail({ Email: '  buyer@example.com  ' })).toBe('buyer@example.com');
+    });
+
+    it('extracts by key name containing email', () => {
+      expect(extractCustomerEmail({ customer_email: 'a@b.co' })).toBe('a@b.co');
+    });
+
+    it('rejects invalid values', () => {
+      expect(extractCustomerEmail({ Email: 'not-an-email' })).toBeUndefined();
+      expect(isValidCustomerEmail('bad')).toBe(false);
     });
   });
 

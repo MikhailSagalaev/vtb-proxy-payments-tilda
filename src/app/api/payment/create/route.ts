@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { registerOrder, getConfig, extractTildaParams, logRequest } from '@/lib/vtb';
 import { db } from '@/lib/db';
-import { verifyTildaSignature, checkRateLimit, getClientIp, isInsecureMode, sanitizeOrderId } from '@/lib/security';
+import { verifyTildaSignature, checkRateLimit, getClientIp, isInsecureMode, sanitizeOrderId, extractCustomerEmail } from '@/lib/security';
 import { errorToMeta, getRequestId, logRequest as logReq } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -24,7 +24,13 @@ export async function POST(request: NextRequest) {
     const { amount, paymentId, subject, allParams, signature } = extractTildaParams(formData);
 
     logRequest(clientIp, '/api/payment/create', allParams);
-    logReq('info', requestId, 'Parsed tilda params', { clientIp, paymentId, hasSignature: !!signature }, false);
+    const customerEmail = extractCustomerEmail(allParams);
+    logReq('info', requestId, 'Parsed tilda params', {
+      clientIp,
+      paymentId,
+      hasSignature: !!signature,
+      hasCustomerEmail: Boolean(customerEmail),
+    }, false);
 
     // Validate required fields
     if (amount === null) {
@@ -115,6 +121,7 @@ export async function POST(request: NextRequest) {
         currency: config.currency,
         orderNumber: paymentId,
         description: subject,
+        email: customerEmail,
         returnUrl,
         failUrl,
         language: config.language,
@@ -133,7 +140,13 @@ export async function POST(request: NextRequest) {
           requestBody: JSON.stringify({
             source: 'tilda_create',
             params: allParams,
-            registerRequest: { returnUrl, failUrl, language: config.language, currency: config.currency },
+            registerRequest: {
+              returnUrl,
+              failUrl,
+              language: config.language,
+              currency: config.currency,
+              hasCustomerEmail: Boolean(customerEmail),
+            },
             error: errorToMeta(error),
           }),
           ipAddress: clientIp,
